@@ -1,0 +1,189 @@
+---
+title: "machine_learning_project"
+author: "Yucheng Xie"
+date: "1/5/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## load files and set seeds
+
+
+```{r}
+library("caret")
+training <- read.csv("D:/pml-training.csv")
+testing <- read.csv("D://pml-testing.csv")
+set.seed(33833)
+```
+
+## preproccess--clean dataset
+### drop first veariable and factorize user_name
+
+```{r}
+training <- training[,-1]
+testing <- testing[,-1]
+training$user_name <- as.factor(training$user_name)
+testing$user_name <- as.factor(testing$user_name)
+```
+
+### change format to numeric and standardize all numeric variables
+```{r}
+v <- as.vector(1:159)
+v <- v[-c(1,4,5,159)]
+for (i in v){
+  training[,i] <- as.numeric(as.character(training[,i]))
+  training[,i] <- (training[,i] - mean(training[,i]))/sd(training[,i])
+  testing[,i] <- as.numeric(as.character(testing[,i]))
+  testing[,i] <- (testing[,i] - mean(testing[,i]))/sd(testing[,i])
+}
+```
+
+### drop variables with more than 10000 na value
+```{r}
+na <- NULL
+for (i in 1:159){
+  nona <- sum(is.na(training[i]))
+  na[i] <- nona
+}
+keep_variable <- na < 10000
+training <- training[keep_variable]
+testing <- testing[keep_variable]
+```
+
+### change time variable to factors indicating time(hour) within a day
+I do it because the time that people do excercises may affect the quality of doing excersices
+two other variables which is raw data for cvtd_timestamp varaible are deleted
+
+```{r}
+training$cvtd_timestamp <- sub(pattern = "[0-9]{2}/[0-9]{2}/[0-9]{4} ", replacement = "",training$cvtd_timestamp)
+training$cvtd_timestamp <-sub(pattern = ":[0-9]{2}", replacement = "",training$cvtd_timestamp)
+training$cvtd_timestamp <- as.factor(training$cvtd_timestamp)
+training <- training[,-c(2,3)]
+
+testing$cvtd_timestamp <- sub(pattern = "[0-9]{2}/[0-9]{2}/[0-9]{4} ", replacement = "",testing$cvtd_timestamp)
+testing$cvtd_timestamp <-sub(pattern = ":[0-9]{2}", replacement = "",testing$cvtd_timestamp)
+testing$cvtd_timestamp <- as.factor(testing$cvtd_timestamp)
+testing <- testing[,-c(2,3)]
+```
+
+### change new_window into a dummy variable
+```{r}
+training[,3] <- as.numeric(training[,3])-1
+testing[,3] <- as.numeric(testing[,3])-1
+```
+
+## preproccess--PCA analysis
+I do principle component analysis so decrease the number of variables. Otherwise the machine-learning programm will take too much resourses
+```{R}
+prepro <- preProcess(training[,-c(1,2,57)],method = "pca",thresh = 0.8)
+trainingpca <- predict(prepro, training[,-c(1,2,57)])
+trainingpca <- (cbind(trainingpca,user_name = training[,1], timestamp = training$cvtd_timestamp, classe = training$classe))
+
+testingpca <- predict(prepro, testing[,-c(1,2,57)])
+testingpca <- (cbind(testingpca,user_name = testing[,1], timestamp = testing$cvtd_timestamp))
+```
+
+## create folds for cross validation
+create 5 folds, use 4 folds as training set, 1 folds as valid set. do it 5 times 
+```{R}
+folds <- createFolds(y=trainingpca$classe,k=5,list=FALSE)
+trainingpca <- cbind(trainingpca,folds)
+for (i in 1:5){
+  traininglist <- split(trainingpca,trainingpca$folds)
+  assign(paste("testing", i, sep = ""),(traininglist[[i]][,-18]))
+}
+training1 <- rbind(testing2,testing3,testing4,testing5)
+training2 <- rbind(testing3,testing4,testing5,testing1)
+training3 <- rbind(testing4,testing5,testing1,testing2)
+training4 <- rbind(testing5,testing1,testing2,testing3)
+training5 <- rbind(testing1,testing2,testing3,testing4)  
+```
+
+## do random forest analysis within each fold
+I only use random forest methods because other mothods (boosting, generalized linear model) get less accurate results. The same for assemled models.
+```{R}
+mod1rf <- train(classe~.,data = training1, method = "rf")
+mod2rf <- train(classe~.,data = training2, method = "rf")
+mod3rf <- train(classe~.,data = training3, method = "rf")
+mod4rf <- train(classe~.,data = training4, method = "rf")
+mod5rf <- train(classe~.,data = training5, method = "rf")
+```
+
+## predict data in valid sets and get accuracy; set accuracy rate as accu_weigh
+I input the accuracy be myself
+```{R}
+pred1rf <- predict(mod1rf,newdata = testing1)
+pred2rf <- predict(mod2rf,newdata = testing2)
+pred3rf <- predict(mod3rf,newdata = testing3)
+pred4rf <- predict(mod4rf,newdata = testing4)
+pred5rf <- predict(mod5rf,newdata = testing5)
+accu1 <- confusionMatrix(pred1rf,testing1$classe)
+accu2 <- confusionMatrix(pred2rf,testing2$classe)
+accu3 <- confusionMatrix(pred3rf,testing3$classe)
+accu4 <- confusionMatrix(pred4rf,testing4$classe)
+accu5 <- confusionMatrix(pred5rf,testing5$classe)
+accu1$
+accu_weigh1 <- 0.9682
+accu_weigh2 <- 0.9694
+accu_weigh3 <- 0.9673
+accu_weigh4 <- 0.9643
+accu_weigh5 <- 0.9658
+```
+
+## predict the results in testing set with 5 models
+```{R}
+pred1test <- predict(mod1rf,newdata = testingpca)
+pred2test <- predict(mod1rf,newdata = testingpca)
+pred3test <- predict(mod1rf,newdata = testingpca)
+pred4test <- predict(mod1rf,newdata = testingpca)
+pred5test <- predict(mod1rf,newdata = testingpca)
+predmatrix <- cbind(pred1test,pred2test,pred3test,pred4test,pred5test)
+```
+
+## vote (weighed by accuracy) to get final results
+weigh equals to accuracy of each model get from previous steps
+```{R}
+add_weigh <- function(factor, pred1, pred2, pred3, pred4, pred5 ){
+  weigh <- 0
+  if (pred1 == factor){weigh <- weigh + accu_weigh1}
+  if (pred2 == factor){weigh <- weigh + accu_weigh2}
+  if (pred3 == factor){weigh <- weigh + accu_weigh3}
+  if (pred4 == factor){weigh <- weigh + accu_weigh4}
+  if (pred5 == factor){weigh <- weigh + accu_weigh5}
+  return(weigh)
+}
+
+vote <- function(pred1, pred2, pred3, pred4, pred5){
+  weigha <- add_weigh(1 ,pred1, pred2, pred3, pred4, pred5)
+  weighb <- add_weigh(2 ,pred1, pred2, pred3, pred4, pred5)
+  weighc <- add_weigh(3 ,pred1, pred2, pred3, pred4, pred5)
+  weighd <- add_weigh(4 ,pred1, pred2, pred3, pred4, pred5)
+  weighe <- add_weigh(5 ,pred1, pred2, pred3, pred4, pred5)
+  if (all(weigha>weighb, weigha>weighc, weigha>weighd, weigha>weighe)){return("a")}
+  else if (all(weighb>weighc, weighb>weighd, weighb>weighe)){return("b")}
+  else if (all(weighc>weighd,weighc>weighe)){return("c")}
+  else if (all(weighd>weighe)){return("d")}
+  else{return("e")}
+}
+result <- NULL
+for (i in 1:nrow(testing)){
+  resulti <- vote(predmatrix[i,1],predmatrix[i,2],predmatrix[i,3],predmatrix[i,4],predmatrix[i,5]) 
+}
+```
+
+##possible out-of sample errors
+I believe out-of sample errors exist because the accuracy of prediction in testing sets are much lower than the accuracy when doing cross validation.
+Maybe the samples in testing set is different in time with those in training set.
+I am not prettey sure.
+Also, in my codes there are many repeating sentences. Do you know how to make them shorter (maybe with loop or something). Thank you
+
+
+
+
+
+
+
+
