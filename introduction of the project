@@ -1,0 +1,13 @@
+Many people wear electronic devices that will record body motion data when they are doing exercises. In this project,I built prediction model to estimate how well they do exercises (measured by different level) with their body motion data. The model was built by learning a training set with body motion data and the quality level of exercises. 
+
+
+discription of the program
+Firstly, principle component analysis was used to decrease the number of variable to less then 20.
+
+5 folds was created within training set for cross validation
+
+the prediction model was built with Random Forest Algorithm. This algorithm is chose because the accuracy of its prediction in this data set is higher than other algorithms like generalized linear model.
+
+I train the prediction model with 4 folds (training set) and check the accuracy of prediction with 1 fold (validating set).I did this step for 5 times with different combination of validiting and training set and get 5 prediction models
+
+A voting algorithm was created which vote to get the final result when disagreement exists among prediction models.
