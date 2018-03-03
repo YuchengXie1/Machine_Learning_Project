@@ -174,9 +174,7 @@ for (i in 1:nrow(testing)){
 }
 ```
 
-##possible out-of sample errors
-according to the cross validation, the out of sample error is approimately 5% because the accuracy is about 95%
-Also, in my codes there are many repeating sentences. Do you know how to make them shorter (maybe with loop or something). Thank you
+
 
 
 
